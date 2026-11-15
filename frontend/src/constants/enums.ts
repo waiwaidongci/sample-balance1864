@@ -4,3 +4,6 @@ export const Dimension={ZONE:'zone',AGE_BAND:'age_band',MODE:'mode'}as const;
 export const dimensionLabels:Record<string,string>={zone:'居住分区',age_band:'年龄组',mode:'出行方式'};
 export const statusLabels:Record<string,string>={queued:'等待校准',running:'迭代计算',completed:'计算完成',failed:'需要处理'};
 export const roleLabels:Record<string,string>={admin:'抽样负责人',analyst:'交通分析师',viewer:'研究阅读者'};
+export const PackageStatus={PENDING:'pending',CONFLICT:'conflict',APPLIED:'applied',FAILED:'failed'}as const;
+export const packageStatusLabels:Record<string,string>={pending:'待处理',conflict:'待解决冲突',applied:'已合并',failed:'校验失败'};
+export const fieldLabels:Record<string,string>={zone:'居住分区',age_band:'年龄组',mode:'出行方式',trip_minutes:'出行时长',base_weight:'初始权重'};

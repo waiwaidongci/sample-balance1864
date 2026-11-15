@@ -7,3 +7,7 @@ export interface RakingResult{converged:boolean;iterations:number;max_residual:n
 export interface Run{id:number;name:string;batch_id:number;tolerance:number;max_iterations:number;cap_ratio:number;status:string;result:RakingResult|null;error:string|null;created_at:string;batch?:Batch}
 export interface Review{id:number;run_id:number;decision:string;note:string;reviewer_id:number;created_at:string}
 export interface Audit{id:number;actor:string;action:string;target:string;created_at:string}
+export interface RegisterVersion{id:number;batch_id:number;version:number;source:string;package_code:string|null;sample_count:number;created_at:string}
+export interface CorrectionPackage{id:number;batch_id:number;code:string;depends_on:string|null;base_version:number;status:string;error:string|null;applied_version:number|null;reason:string;conflict_count:number;created_at:string;applied_at:string|null}
+export interface CorrectionConflict{id:number;package_id:number;sample_code:string;field:string;base_value:string;current_value:string;incoming_value:string;status:string;resolution:string|null;resolved_by:string|null}
+export interface CorrectionDetail extends CorrectionPackage{conflicts:CorrectionConflict[]}

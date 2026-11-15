@@ -1,7 +1,7 @@
 import random
 from sqlalchemy import select,func
 from src.config.database import Base,engine,SessionLocal
-from src.models import User,SampleBatch,SampleUnit,MarginTarget,WeightRun,WeightReview
+from src.models import User,SampleBatch,SampleUnit,MarginTarget,WeightRun,WeightReview,RegisterVersion,CorrectionPackage,CorrectionConflict
 from src.utils.security import hash_password
 from src.services.run_service import compute
 
@@ -30,6 +30,31 @@ def seed():
             batch=db.scalar(select(SampleBatch).where(SampleBatch.code=='nov-city'))
             run=WeightRun(name=name,batch_id=batch.id,created_by=user.id,tolerance=.00001,max_iterations=500,cap_ratio=12);db.add(run);db.commit();compute(db,run.id)
             if run.result['converged']:db.add(WeightReview(run_id=run.id,decision='approved',note='合成样本演示：边际已收敛，保留有效样本与方法边界。',reviewer_id=user.id));db.commit()
-        counts={name:db.scalar(select(func.count()).select_from(model)) for name,model in [('users',User),('batches',SampleBatch),('units',SampleUnit),('targets',MarginTarget),('runs',WeightRun),('reviews',WeightReview)]}
+        seed_corrections(db,user)
+        counts={name:db.scalar(select(func.count()).select_from(model)) for name,model in [('users',User),('batches',SampleBatch),('units',SampleUnit),('targets',MarginTarget),('runs',WeightRun),('reviews',WeightReview),('versions',RegisterVersion),('packages',CorrectionPackage),('conflicts',CorrectionConflict)]}
         print(counts);return counts
+
+def correction_csv(rows):
+    lines=['code,zone,age_band,mode,trip_minutes,base_weight']
+    for r in rows:lines.append(','.join(str(r[k]) for k in ['code','zone','age_band','mode','trip_minutes','base_weight']))
+    return '\n'.join(lines)
+
+def seed_corrections(db,user):
+    """演示更正包：初始底册版本、一个已合并包、一个等待未到达前序的包；按代码幂等。"""
+    from src.services.correction_service import ensure_initial_version,import_correction,latest_version
+    from src.schemas.correction import CorrectionInput
+    batch=db.scalar(select(SampleBatch).where(SampleBatch.code=='nov-city'))
+    for b in db.scalars(select(SampleBatch)):
+        ensure_initial_version(db,b.id)
+    db.commit()
+    if db.scalar(select(CorrectionPackage).where(CorrectionPackage.code=='YY-FIX-001')):return
+    base=db.scalar(select(RegisterVersion).where(RegisterVersion.batch_id==batch.id,RegisterVersion.version==1))
+    rows={r['code']:r for r in base.snapshot}
+    other=lambda options,current:next(x for x in options if x!=current)
+    changed=[]
+    for code,edits in [('YY0-0001',{'zone':other(['中心','东区','西区'],rows['YY0-0001']['zone'])}),('YY0-0002',{'trip_minutes':round(rows['YY0-0002']['trip_minutes']+5,2)}),('YY0-0003',{'mode':other(['小汽车','公交','轨道'],rows['YY0-0003']['mode']),'age_band':other(['青年','中年','长者'],rows['YY0-0003']['age_band'])})]:
+        row={k:rows[code][k] for k in ['code','zone','age_band','mode','trip_minutes','base_weight']};row.update(edits);changed.append(row)
+    import_correction(db,batch.id,CorrectionInput(code='YY-FIX-001',csv_text=correction_csv(changed)),user)
+    row={k:rows['YY0-0004'][k] for k in ['code','zone','age_band','mode','trip_minutes','base_weight']};row['zone']=other(['中心','东区','西区'],row['zone'])
+    import_correction(db,batch.id,CorrectionInput(code='YY-FIX-003',depends_on='YY-FIX-002',csv_text=correction_csv([row])),user)
 if __name__=='__main__':seed()

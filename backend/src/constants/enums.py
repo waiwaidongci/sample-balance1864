@@ -12,3 +12,8 @@ class Dimension(StrEnum):
     ZONE='zone'
     AGE_BAND='age_band'
     MODE='mode'
+class PackageStatus(StrEnum):
+    PENDING='pending'
+    CONFLICT='conflict'
+    APPLIED='applied'
+    FAILED='failed'

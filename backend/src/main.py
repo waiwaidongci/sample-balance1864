@@ -16,6 +16,10 @@ async def lifespan(app):
             from scripts.seed_demo import seed
             seed()
         except Exception:logging.exception('seed failed; service remains available')
+    try:
+        from src.services.correction_service import recover_corrections
+        recover_corrections()
+    except Exception:logging.exception('correction recovery failed; service remains available')
     yield
 app=FastAPI(title='原野交通抽样校准席',lifespan=lifespan)
 app.add_middleware(RequestGuard);app.add_middleware(ErrorHandler)

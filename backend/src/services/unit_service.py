@@ -6,13 +6,14 @@ from src.models import SampleUnit
 from src.schemas.unit import UnitInput
 from src.utils.serializers import serialize
 from .batch_service import get_batch
+from .correction_service import lock_batch,ensure_initial_version,snapshot_version
 
 def list_units(db,batch_id):
     get_batch(db,batch_id)
     return [serialize(x) for x in db.scalars(select(SampleUnit).where(SampleUnit.batch_id==batch_id).order_by(SampleUnit.code))]
 
 def import_units(db,batch_id,csv_text):
-    get_batch(db,batch_id)
+    lock_batch(db,batch_id)
     try:
         parsed=[UnitInput.model_validate(x) for x in csv.DictReader(io.StringIO(csv_text.lstrip('\ufeff')))]
     except (ValidationError,ValueError):raise HTTPException(422,'CSV字段或数值无效：需要code/zone/age_band/mode/trip_minutes/base_weight')
@@ -20,7 +21,10 @@ def import_units(db,batch_id,csv_text):
     codes=[x.code for x in parsed]
     if len(set(codes))!=len(codes):raise HTTPException(422,'CSV样本编号重复')
     existing=set(db.scalars(select(SampleUnit.code).where(SampleUnit.batch_id==batch_id)))
-    if existing&set(codes):raise HTTPException(409,'存在已导入的样本编号，整批未写入')
+    if existing&set(codes):raise HTTPException(409,'存在已导入的样本编号，整批未写入；更正已有样本请改用更正包')
     if len(existing)+len(parsed)>5000:raise HTTPException(422,'每批最多5000条')
+    ensure_initial_version(db,batch_id)
     for row in parsed:db.add(SampleUnit(batch_id=batch_id,**row.model_dump()))
+    db.flush()
+    snapshot_version(db,batch_id,'CSV导入')
     return len(parsed)

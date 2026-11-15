@@ -42,13 +42,24 @@ docker compose exec -T backend python -m scripts.seed_demo
 
 独立4样本oracle：A组目标60、B组40，其余两维50/50，权重应为30/30/20/20；加权时长23、原始25、ESS10000/2600、设计效应1.04。cap_ratio=1不能满足目标，必须显示未收敛。
 
+## 更正包合并口径
+
+机构离线更正样本走更正包，不再因同编号整份拒收。实现位置 `backend/src/services/correction_service.py` 与 `merge_engine.py`。
+
+1. 流程：页面下载底册版本CSV → 离线改正整行 → 以更正包导入(列与底册相同)。系统按包登记的基线版本逐字段diff，只合并发生变化的字段。
+2. 三向合并：当前值==基线值干净应用；当前值==新值幂等收敛；同字段出现不同新值列入冲突，可裁决采用传入值/保留当前值/自定义值。不同字段的独立改动互不影响、合并保留。
+3. 原子性：包内样本全部成功才更新底册；未知编号、非法取值使整包failed且底册零变化，失败包可用同一代码修正重投。
+4. 依赖：更正包可声明前序包代码；前序未到达/未合并时包保持pending并展示原因，到达后按依赖顺序自动级联。冲突/失败只阻塞各自后继，不挡独立包。
+5. 幂等与恢复：每批次行锁串行化合并，每包独立事务，状态机单调前进；(批次,包代码)唯一，同内容重复投递返回现状不重复写入；启动时recover_corrections重放待处理包，与并发合并结果相同。
+6. 版本：底册每次变更(CSV导入/更正包合并)留完整JSON快照，页面可按版本下载CSV。历史校准运行的样本快照存于run.result，更正不回写，交付仍按原样本。
+
 ## 页面与结构
 
-六个研究页面：总览、样本底册、目标边际、校准配置/记录、诊断结果、复核交付（含有权角色的审计）。BatchSelect、RunTable、CalibrationSummary、MarginTable跨页复用；PageHeading/ErrorNotice/StatusBadge为公共组件；useTask/usePolling与格式工具共享。初始3批共1280条样本、27个目标格、一个实际计算的初始运行及获批记录，种子73/74/75。
+七个研究页面：总览、样本底册、目标边际、校准配置/记录、样本更正、诊断结果、复核交付（含有权角色的审计）。BatchSelect、RunTable、CalibrationSummary、MarginTable跨页复用；PageHeading/ErrorNotice/StatusBadge为公共组件；useTask/usePolling与格式工具共享。初始3批共1280条样本、27个目标格、一个实际计算的初始运行及获批记录，种子73/74/75；另含演示更正包：YY-FIX-001已合并、YY-FIX-003等待未到达的YY-FIX-002。
 
 前端：`src/{api,stores,types,components/common,hooks,pages,router,utils,constants}`；后端：`src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}`；种子在`backend/scripts/seed_demo.py`，结构约束见`backend/migrations/001_schema.md`。测试、截图和TESTING只在批次`test-artifacts/gb-0015/`。
 
-共享枚举Role/RunStatus/Dimension后端在`backend/src/constants/enums.py`，前端在`frontend/src/constants/enums.ts`；角色认证在middlewares/auth、auth store；状态用于run_service/worker/StatusBadge；Dimension用于target schema、raking维度与目标页。数据库字段采用相同枚举字符串。
+共享枚举Role/RunStatus/Dimension/PackageStatus后端在`backend/src/constants/enums.py`，前端在`frontend/src/constants/enums.ts`；角色认证在middlewares/auth、auth store；状态用于run_service/worker/StatusBadge与更正包列表；Dimension用于target schema、raking维度与目标页。数据库字段采用相同枚举字符串。
 
 ## 环境与开发
 
